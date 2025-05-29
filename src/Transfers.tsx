@@ -53,17 +53,6 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
   const provider = new ethers.providers.Web3Provider(connectedWallet.provider);
   const toast = useToast();
 
-  const sendAddress = async (str: string) => {
-    if (rollups) {
-      try {
-        await rollups.relayContract.relayDAppAddress(propos.dappAddress);
-        setDappRelayedAddress(true);
-      } catch (e) {
-        console.log(`${e}`);
-      }
-    }
-  };
-
   const depositErc20ToPortal = async (token: string, amount: number) => {
     try {
       if (rollups && provider) {
@@ -250,7 +239,6 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
   };
 
   const [input, setInput] = useState<string>("");
-  const [dappRelayedAddress, setDappRelayedAddress] = useState<boolean>(false)
   const [hexInput, setHexInput] = useState<boolean>(false);
   const [erc20Amount, setErc20Amount] = useState<number>(0);
   const [erc20Token, setErc20Token] = useState<string>("");
@@ -420,21 +408,7 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
               After the withdraw request, the user has to execute a voucher to transfer assets from Cartesi dApp to their account. 
             </Text>
             <br />
-            {!dappRelayedAddress && 
-              <div>
-                Let the dApp know its address! <br />
-                <Button
-                  size="sm"
-                  onClick={() => sendAddress(input)}
-                  disabled={!rollups}
-                >
-                  Relay Address
-                </Button>
-                <br />
-                <br />
-              </div>
-              }
-              {dappRelayedAddress && <Vouchers dappAddress={propos.dappAddress} />}
+            <Vouchers dappAddress={propos.dappAddress} />
             </Accordion>
           </TabPanel>
           <TabPanel>
