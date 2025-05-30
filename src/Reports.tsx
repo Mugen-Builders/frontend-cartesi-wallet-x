@@ -1,18 +1,6 @@
-// Copyright 2022 Cartesi Pte. Ltd.
-
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License. You may obtain a copy
-// of the license at http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 import { ethers } from "ethers";
 import React from "react";
-import { useReportsQuery } from "./generated/graphql";
+//import { useReportsQuery } from "./generated/graphql";
 import {
     Table,
     Thead,
@@ -34,9 +22,9 @@ type Report = {
 };
 
 export const Reports: React.FC = () => {
-    const [result,reexecuteQuery] = useReportsQuery();
-    const { data, fetching, error } = result;
-
+    //const [result,reexecuteQuery] = useReportsQuery();
+    //const { data, fetching, error } = result;
+/*
     if (fetching) return <p>Loading...</p>;
     if (error) return <p>Oh no... {error.message}</p>;
 
@@ -77,16 +65,17 @@ export const Reports: React.FC = () => {
             return b.input.index - a.input.index;
         }
     });
-
+*/
     // const forceUpdate = useForceUpdate();
     return (
         <div>
+            {/*
             <Table>
                 <Thead>
                     <Tr>
                         {/* <Th>Input Index</Th>
-                        <Th>Notice Index</Th> */}
-                        {/* <th>Input Payload</th> */}
+                        <Th>Notice Index</Th> --
+                        {/* <th>Input Payload</th> --
                         <Th>Reports <Button size='xs' onClick={() => reexecuteQuery({ requestPolicy: 'network-only' })}>
                 🔃                  </Button>
                         </Th>
@@ -101,14 +90,14 @@ export const Reports: React.FC = () => {
                     {reports.map((n: any) => (
                         <Tr key={`${n.input.index}-${n.index}`}>
                             {/* <Td>{n.input.index}</Td>
-                            <Td>{n.index}</Td> */}
-                            {/* <td>{n.input.payload}</td> */}
+                            <Td>{n.index}</Td> --
+                            {/* <td>{n.input.payload}</td> --
                             <Td color={'grey'}>{n.payload}</Td>
                         </Tr>
                     ))}
                 </Tbody>
             </Table>
-
+            */}
         </div>
     );
 };

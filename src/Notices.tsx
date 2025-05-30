@@ -1,57 +1,40 @@
-// Copyright 2022 Cartesi Pte. Ltd.
-
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License. You may obtain a copy
-// of the license at http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
-import { ethers } from "ethers";
 import React, { useEffect, useState } from "react";
-import { useNoticesQuery } from "./generated/graphql";
 import { useToast } from '@chakra-ui/react'
-import { Badge, Button } from '@chakra-ui/react'
+import { Button } from '@chakra-ui/react'
 import {
     Table,
     Thead,
     Tbody,
-    Tfoot,
     Tr,
     Th,
     Td,
-    TableCaption,
-    TableContainer,
     Box
 } from '@chakra-ui/react'
 
 type Notice = {
     id: string;
     index: number;
-    input: any, //{index: number; epoch: {index: number; }
+    input: any, 
     payload: string;
 };
 
 export const Notices: React.FC = () => {
-    const [result, reexecuteQuery] = useNoticesQuery();
-    const { data, fetching, error } = result;
+    //const [result, reexecuteQuery] = useNoticesQuery();
+    //const { data, fetching, error } = result;
     const [previousLength, setPreviousLength] = useState<number>(0);
 
     const toast = useToast()
 
     useEffect(() => {
-        reexecuteQuery({ requestPolicy: 'network-only' });
-    }, [reexecuteQuery]);
+        //reexecuteQuery({ requestPolicy: 'network-only' });
+    }, []);
 
-    if (fetching) return <p>Loading...</p>;
-    if (error) return <p>Oh no... {error.message}</p>;
+    //if (fetching) return <p>Loading...</p>;
+    //if (error) return <p>Oh no... {error.message}</p>;
 
-    if (!data || !data.notices) return <p>No notices</p>;
+    //if (!data || !data.notices) return <p>No notices</p>;
 
-    const notices: Notice[] = data.notices.edges.map((node: any) => {
+    /* const notices: Notice[] = data.notices.edges.map((node: any) => {
         const n = node.node;
         let inputPayload = n?.input.payload;
         if (inputPayload) {
@@ -86,7 +69,7 @@ export const Notices: React.FC = () => {
             return b.input.index - a.input.index;
         }
     });
-
+    */
     function payloadIsJSON(payload: any) {
         try {
             JSON.parse(payload);
@@ -105,23 +88,24 @@ export const Notices: React.FC = () => {
                         {/* <th>Input Index</th>
                         <th>Notice Index</th> */}
                         {/* <th>Input Payload</th> */}
+
                         <Th>Notices <Button size='xs' onClick={() => {
-                            reexecuteQuery({ requestPolicy: 'network-only' });
+                            //reexecuteQuery({ requestPolicy: 'network-only' });
                             }}>🔃</Button>
                         </Th>
                         <Th></Th>
                     </Tr>
                 </Thead>
                 <Tbody>
-                    {notices.length === 0 && (
+                    {/* {notices.length === 0 && (
                         <Tr>
                             <Td colSpan={4}>-</Td>
                         </Tr>
-                    )}
+                    )} 
                     {notices.map((n: any) => (
                         <Tr key={`${n.input.index}-${n.index}`}>
 
-                            {/* Conditionally render deposit activity */}
+                            {/* Conditionally render deposit activity -- }
                             {payloadIsJSON(n.payload) ? (
                                 JSON.parse(n.payload).type === "etherdeposit" ? (
                                     <Td color={'grey'}><Badge colorScheme="cyan">{JSON.parse(n.payload).type}</Badge></Td>
@@ -162,7 +146,7 @@ export const Notices: React.FC = () => {
 
 
                         </Tr>
-                    ))}
+                    ))} */}
                 </Tbody>
             </Table>
 

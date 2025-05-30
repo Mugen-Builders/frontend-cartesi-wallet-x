@@ -1,37 +1,18 @@
-// Copyright 2022 Cartesi Pte. Ltd.
-
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License. You may obtain a copy
-// of the license at http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 import React, { useState } from "react";
-import { useSetChain } from "@web3-onboard/react";
+import { useSetChain, useConnectWallet } from "@web3-onboard/react";
 import { ethers } from "ethers";
-// import { useRollups } from "./useRollups";
-
 import configFile from "./config.json";
-import { parseEther } from "ethers/lib/utils";
-//import "./App.css"
 import {
     Table,
     Thead,
     Tbody,
-    Tfoot,
     Tr,
     Th,
     Td,
-    TableCaption,
     TableContainer,
     Button,
     Stack,
     Box,
-    Spacer
   } from '@chakra-ui/react'
 
 const config: any = configFile;
@@ -39,35 +20,30 @@ interface Report {
     payload: string;
 }
 
-export const Balance: React.FC = () => {
-    // const rollups = useRollups();
+export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => {
     const [{ connectedChain }] = useSetChain();
+    const [{ wallet }] = useConnectWallet();
+    const connectedAccount = wallet?.accounts[0]?.address;
+
     const inspectCall = async (str: string) => {
         let payload = str;
-        if (hexData) {
-            const uint8array = ethers.utils.arrayify(payload);
-            payload = new TextDecoder().decode(uint8array);
-        }
         if (!connectedChain){
             return;
         }
-        
         let apiURL= ""
 
         if(config[connectedChain.id]?.inspectAPIURL) {
-            apiURL = `${config[connectedChain.id].inspectAPIURL}/inspect`;
+            apiURL = `${config[connectedChain.id].inspectAPIURL}/inspect/${appAddress}`;
         } else {
             console.error(`No inspect interface defined for chain ${connectedChain.id}`);
             return;
         }
         
         let fetchData: Promise<Response>;
-        if (postData) {
-            const payloadBlob = new TextEncoder().encode(payload);
-            fetchData = fetch(`${apiURL}`, { method: 'POST', body: payloadBlob });
-        } else {
-            fetchData = fetch(`${apiURL}/${payload}`);
-        }
+        
+        const payloadBlob = new TextEncoder().encode(payload);
+        fetchData = fetch(`${apiURL}`, { method: 'POST', body: payloadBlob });
+        
         fetchData
             .then(response => response.json())
             .then(data => {
@@ -87,12 +63,9 @@ export const Balance: React.FC = () => {
                 //console.log(parseEther("1000000000000000000", "gwei"))
             });
     };
-    const [inspectData, setInspectData] = useState<string>("");
     const [reports, setReports] = useState<string[]>([]);
     const [decodedReports, setDecodedReports] = useState<any>({});
     const [metadata, setMetadata] = useState<any>({});
-    const [hexData, setHexData] = useState<boolean>(false);
-    const [postData, setPostData] = useState<boolean>(false);
 
     return (
         <Box borderWidth='1px' borderRadius='lg' overflow='hidden'>
@@ -129,7 +102,7 @@ export const Balance: React.FC = () => {
                     </Tr>}
                 </Tbody>
             </Table>
-            <Button onClick={() => inspectCall("balance/0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")}>Get Balance</Button>
+            <Button onClick={() => inspectCall(`balance/${connectedAccount}`)}>Get Balance</Button>
             </Stack>
         </TableContainer>
         </Box>

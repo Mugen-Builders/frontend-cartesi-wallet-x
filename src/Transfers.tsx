@@ -10,27 +10,23 @@
 // License for the specific language governing permissions and limitations
 // under the License.
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ethers } from "ethers";
-import { useRollups } from "./useRollups";
+import {
+  BaseError,
+  erc20Abi,
+  erc721Abi,
+  parseAbi,
+  parseEther,
+  parseUnits,
+  toHex,
+  type Hex,
+} from "viem";
 import { useWallets } from "@web3-onboard/react";
-import {
-  IERC1155__factory,
-  IERC20__factory,
-  IERC721__factory,
-} from "./generated/rollups";
 import { Tabs, TabList, TabPanels, TabPanel, Tab } from "@chakra-ui/react";
-import { Divider } from "@chakra-ui/react";
 import { useToast } from "@chakra-ui/react";
-import { Button, ButtonGroup, Box } from "@chakra-ui/react";
-import {
-  NumberInput,
-  NumberInputField,
-  NumberInputStepper,
-  NumberIncrementStepper,
-  NumberDecrementStepper,
-} from "@chakra-ui/react";
-import { Input, Stack, Flex } from "@chakra-ui/react";
+import { Button, Box } from "@chakra-ui/react";
+import { Input, Stack } from "@chakra-ui/react";
 import {
   Accordion,
   AccordionItem,
@@ -42,17 +38,25 @@ import { Text } from "@chakra-ui/react";
 import { Vouchers } from "./Vouchers";
 import { Notices } from "./Notices";
 import { Reports } from "./Reports";
+import { INodeComponentProps } from "./utils/models";
+import { chains, getClient, getWalletClient } from "./utils/chain";
 
-interface IInputPropos {
-  dappAddress: string;
-}
 
-export const Transfers: React.FC<IInputPropos> = (propos) => {
-  const rollups = useRollups(propos.dappAddress);
-  const [connectedWallet] = useWallets();
-  const provider = new ethers.providers.Web3Provider(connectedWallet.provider);
+export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentProps,) => {
+  const [chainId, setChainId] = useState<number>();
   const toast = useToast();
 
+  useEffect(() => {
+    console.log("props.chain: ", props.chain); 
+    if (!props.chain) {
+      setChainId(undefined);
+      return;
+    }
+    setChainId(props.chain);
+    console.log("chainId: ", chainId); 
+  }, [props.chain]);
+
+  /*
   const depositErc20ToPortal = async (token: string, amount: number) => {
     try {
       if (rollups && provider) {
@@ -104,20 +108,28 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
       console.log(`${e}`);
     }
   };
-
-  const depositEtherToPortal = async (amount: number) => {
+  */
+  const depositEtherToPortal = async (value: number) => {
     try {
-      if (rollups && provider) {
-        const data = ethers.utils.toUtf8Bytes(`Deposited (${amount}) ether.`);
-        const txOverrides = { value: ethers.utils.parseEther(`${amount}`) };
-        console.log("Ether to deposit: ", txOverrides);
+      if (chainId) {
+        const client = await getClient(chainId);
+        const walletClient = await getWalletClient(chainId);
+        if (!client || !walletClient) return;
+        const [address] = await walletClient.requestAddresses();
+        if (!address) return;
 
-        // const tx = await ...
-        rollups.etherPortalContract.depositEther(
-          propos.dappAddress,
-          data,
-          txOverrides
-        );
+        const valueInWei = parseEther(value.toString()); 
+        const data = toHex(`Deposited (${value}) ether.`);
+        
+        
+        const txHash = await walletClient.depositEther({
+          application: props.appAddress,
+          value: valueInWei,
+          account: address,
+          chain: chains[chainId],
+          execLayerData: data,
+        });
+        await client.waitForTransactionReceipt({ hash: txHash });
       }
     } catch (e) {
       console.log(`${e}`);
@@ -126,9 +138,16 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
 
   const withdrawEther = async (amount: number) => {
     try {
-      if (rollups && provider) {
+      if (chainId && props.appAddress) {
+        const client = await getClient(chainId);
+        const walletClient = await getWalletClient(chainId);
+
+        if (!client || !walletClient) return;
+
+        const [address] = await walletClient.requestAddresses();
+        if (!address) return;
+
         let ether_amount = ethers.utils.parseEther(String(amount)).toString();
-        console.log("ether after parsing: ", ether_amount);
         const input_obj = {
           method: "ether_withdraw",
           args: {
@@ -136,14 +155,22 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
           },
         };
         const data = JSON.stringify(input_obj);
-        let payload = ethers.utils.toUtf8Bytes(data);
-        await rollups.inputContract.addInput(propos.dappAddress, payload);
+        let payload = toHex(data);
+        const txHash = await walletClient.addInput({
+          application: props.appAddress,
+          payload,
+          account: address,
+          chain: chains[chainId],
+        });
+
+        await client.waitForTransactionReceipt({ hash: txHash });
       }
     } catch (e) {
       console.log(e);
     }
   };
 
+  /*
   const withdrawErc20 = async (amount: number, address: String) => {
     try {
       if (rollups && provider) {
@@ -164,7 +191,9 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
       console.log(e);
     }
   };
+  */
 
+  /*
   const withdrawErc721 = async (address: String, id: number) => {
     try {
       if (rollups && provider) {
@@ -185,7 +214,9 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
       console.log(e);
     }
   };
+  */
 
+  /*
   const transferNftToPortal = async (
     contractAddress: string,
     nftid: number
@@ -237,7 +268,7 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
       console.log(`${e}`);
     }
   };
-
+  */
   const [input, setInput] = useState<string>("");
   const [hexInput, setHexInput] = useState<boolean>(false);
   const [erc20Amount, setErc20Amount] = useState<number>(0);
@@ -271,25 +302,20 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
                 </h2>
                 <AccordionPanel>
                   <Stack>
-                    <NumberInput
-                      defaultValue={0}
-                      min={0}
-                      onChange={(value) => setEtherAmount(Number(value))}
+                    <Input
+                      type="number"
+                      step="any"
+                      placeholder="0.0"
                       value={etherAmount}
-                    >
-                      <NumberInputField />
-                      <NumberInputStepper>
-                        <NumberIncrementStepper />
-                        <NumberDecrementStepper />
-                      </NumberInputStepper>
-                    </NumberInput>
+                      onChange={e => setEtherAmount(Number(e.target.value))}
+                    />
                     <Button
                       colorScheme="blue"
                       size="sm"
                       onClick={() => {
                         depositEtherToPortal(etherAmount);
                       }}
-                      disabled={!rollups}
+                      disabled={!chainId}
                     >
                       Deposit
                     </Button>
@@ -298,7 +324,7 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
                       onClick={() => {
                         withdrawEther(etherAmount);
                       }}
-                      disabled={!rollups}
+                      disabled={!chainId}
                     >
                       Withdraw
                     </Button>
@@ -306,7 +332,7 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
                   <br/>
                 </AccordionPanel>
               </AccordionItem>
-
+              {/*
               <AccordionItem>
                 <h2>
                   <AccordionButton>
@@ -353,7 +379,7 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
                   <br/>
                 </AccordionPanel>
               </AccordionItem>
-
+              */}
               <AccordionItem>
                 <h2>
                   <AccordionButton>
@@ -362,6 +388,7 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
                   </AccordionButton>
                 </h2>
                 <AccordionPanel>
+                  {/*
                   <Stack>
                     <Input
                       type="text"
@@ -394,9 +421,11 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
                     >
                       Withdraw
                     </Button>
+                    
                     <br />
                     <br />
-                  </Stack>
+                  </Stack> 
+                  */}
                 </AccordionPanel>
               </AccordionItem>
             </Accordion>
@@ -408,7 +437,7 @@ export const Transfers: React.FC<IInputPropos> = (propos) => {
               After the withdraw request, the user has to execute a voucher to transfer assets from Cartesi dApp to their account. 
             </Text>
             <br />
-            <Vouchers dappAddress={propos.dappAddress} />
+            {/* <Vouchers dappAddress={propos.dappAddress} /> */}
             </Accordion>
           </TabPanel>
           <TabPanel>
