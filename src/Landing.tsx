@@ -8,9 +8,9 @@ const Landing: React.FC = () => {
   return (
     <Box mt='20' alignContent={"center"}>
       <Stack>
-        <Heading>Welcome to Cartesi Wallet dApp! 💰</Heading>
+        <Heading>Welcome to Cartesi Wallet App! 💰</Heading>
         <Text color={'grey'}>
-          Assets are paramount for the functioning of dApps on-chain. This web interface will guide you on how to deposit and withdraw assets from a Cartesi rollups dApp. Play around and you'll learn a few tricks on how to build wallets for dApp chains. 🚀
+          Assets are integral part of apps on-chain. This web interface will guide you on how to bridge assets to and from a Cartesi rollups application. Play around and you'll learn a few tricks on how to build in-app wallets for App-chains. 🚀
         </Text>
         <Button
           onClick={() =>

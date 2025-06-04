@@ -288,7 +288,7 @@ export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentPr
         <TabPanels>
           <TabPanel>
             <Text fontSize="sm" color="grey">
-              Cartesi dApps recieve asset deposits via Portal smart contracts on
+              Cartesi apps receive asset deposits via Portal smart contracts on
               the base layer.
             </Text>
             <br />
@@ -434,7 +434,7 @@ export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentPr
           <TabPanel>
             <Accordion defaultIndex={[0]} allowMultiple>
             <Text fontSize="sm" color="grey">
-              After the withdraw request, the user has to execute a voucher to transfer assets from Cartesi dApp to their account. 
+              After the withdraw request, the user has to execute a valid voucher to transfer assets from the Cartesi app to their account. 
             </Text>
             <br />
             {/* <Vouchers dappAddress={propos.dappAddress} /> */}

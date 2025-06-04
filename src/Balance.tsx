@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { useSetChain, useConnectWallet } from "@web3-onboard/react";
 import { ethers } from "ethers";
 import configFile from "./config.json";
+import { createCartesiPublicClient } from "@cartesi/viem";
+import { http } from "viem";
 import {
     Table,
     Thead,
@@ -13,6 +15,7 @@ import {
     Button,
     Stack,
     Box,
+    useToast,
   } from '@chakra-ui/react'
 
 const config: any = configFile;
@@ -24,48 +27,128 @@ export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => 
     const [{ connectedChain }] = useSetChain();
     const [{ wallet }] = useConnectWallet();
     const connectedAccount = wallet?.accounts[0]?.address;
+    const toast = useToast();
+    const [isLoading, setIsLoading] = useState(false);
+    const [reports, setReports] = useState<string[]>([]);
+    const [decodedReports, setDecodedReports] = useState<any>({});
 
     const inspectCall = async (str: string) => {
         let payload = str;
         if (!connectedChain){
+            toast({
+                title: "Error",
+                description: "Please connect to a network first",
+                status: "error",
+                duration: 5000,
+                isClosable: true,
+            });
             return;
         }
-        let apiURL= ""
 
-        if(config[connectedChain.id]?.inspectAPIURL) {
-            apiURL = `${config[connectedChain.id].inspectAPIURL}/inspect/${appAddress}`;
-        } else {
-            console.error(`No inspect interface defined for chain ${connectedChain.id}`);
-            return;
-        }
-        
-        let fetchData: Promise<Response>;
-        
-        const payloadBlob = new TextEncoder().encode(payload);
-        fetchData = fetch(`${apiURL}`, { method: 'POST', body: payloadBlob });
-        
-        fetchData
-            .then(response => response.json())
-            .then(data => {
+        // Validate app address
+        try {
+            if (!config[connectedChain.id]?.inspectAPIURL) {
+                toast({
+                    title: "Error",
+                    description: `No inspect interface defined for chain ${connectedChain.id}`,
+                    status: "error",
+                    duration: 5000,
+                    isClosable: true,
+                });
+                return;
+            }
+
+            const client = createCartesiPublicClient({
+                transport: http(config[connectedChain.id].inspectAPIURL)
+            });
+
+            // Try to get application info to validate it exists
+            try {
+                await client.getApplication({ application: appAddress });
+            } catch (error) {
+                toast({
+                    title: "Invalid Application",
+                    description: "The provided application address is not valid on this network",
+                    status: "error",
+                    duration: 5000,
+                    isClosable: true,
+                });
+                return;
+            }
+
+            let apiURL = `${config[connectedChain.id].inspectAPIURL}/inspect/${appAddress}`;
+            
+            setIsLoading(true);
+            try {
+                const payloadBlob = new TextEncoder().encode(payload);
+                const response = await fetch(`${apiURL}`, { method: 'POST', body: payloadBlob });
+                const data = await response.json();
+                console.log("DATA from inspect: ", data);
+
+                if (data.status === "Rejected") {
+                    toast({
+                        title: "Server Error",
+                        description: "The server rejected the request. Please try again later.",
+                        status: "error",
+                        duration: 5000,
+                        isClosable: true,
+                    });
+                    return;
+                }
+
+                if (data.status === "Accepted") {
+                    if (!data.reports || data.reports.length === 0) {
+                        toast({
+                            title: "No Data",
+                            description: "No balance data available. This might be due to an error in processing.",
+                            status: "warning",
+                            duration: 5000,
+                            isClosable: true,
+                        });
+                    }
+                }
+
                 setReports(data.reports);
-                setMetadata({status: data.status, exception_payload: data.exception_payload});
-                console.log("Metadata:", data.reports);
 
                 // Decode payload from each report
-                const decode = data.reports.map((report: Report) => {
-                return ethers.utils.toUtf8String(report.payload);
+                if (data.reports && data.reports.length > 0) {
+                    const decode = data.reports.map((report: Report) => {
+                        return ethers.utils.toUtf8String(report.payload);
+                    });
+                    try {
+                        const reportData = JSON.parse(decode);
+                        setDecodedReports(reportData);
+                    } catch (parseError) {
+                        toast({
+                            title: "Data Error",
+                            description: "Failed to parse balance data",
+                            status: "error",
+                            duration: 5000,
+                            isClosable: true,
+                        });
+                    }
+                }
+            } catch (error) {
+                toast({
+                    title: "Network Error",
+                    description: "Failed to fetch balance data. Please check your connection.",
+                    status: "error",
+                    duration: 5000,
+                    isClosable: true,
                 });
-                console.log("Decoded Reports:", decode);
-                const reportData = JSON.parse(decode)
-                console.log("Report data: ", reportData)
-                setDecodedReports(reportData)
-                console.log("Erc20 : ", decodedReports.erc20)
-                //console.log(parseEther("1000000000000000000", "gwei"))
+            } finally {
+                setIsLoading(false);
+            }
+        } catch (error) {
+            toast({
+                title: "Application Error",
+                description: "Failed to validate application address",
+                status: "error",
+                duration: 5000,
+                isClosable: true,
             });
+        }
     };
-    const [reports, setReports] = useState<string[]>([]);
-    const [decodedReports, setDecodedReports] = useState<any>({});
-    const [metadata, setMetadata] = useState<any>({});
 
     return (
         <Box borderWidth='1px' borderRadius='lg' overflow='hidden'>
@@ -82,7 +165,7 @@ export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => 
                 <Tbody>
                     {reports?.length === 0 && (
                         <Tr>
-                            <Td colSpan={4} textAlign={'center'} fontSize='14' color='grey' >looks like your cartesi dapp balance is zero! 🙁</Td>
+                            <Td colSpan={4} textAlign={'center'} fontSize='14' color='grey' >Zero in-app balance! Deposit an asset to get started. </Td>
                         </Tr>
                     )}
                 
@@ -102,7 +185,13 @@ export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => 
                     </Tr>}
                 </Tbody>
             </Table>
-            <Button onClick={() => inspectCall(`balance/${connectedAccount}`)}>Get Balance</Button>
+            <Button 
+                onClick={() => inspectCall(`balance/${connectedAccount}`)}
+                isLoading={isLoading}
+                loadingText="Fetching balance..."
+            >
+                Get Balance
+            </Button>
             </Stack>
         </TableContainer>
         </Box>
