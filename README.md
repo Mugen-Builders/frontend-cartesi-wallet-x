@@ -1,7 +1,7 @@
 # Frontend-Cartesi-Wallet-x
 
 ```
-Cartesi Rollups version: 1.0.x
+Cartesi Rollups version: 2.0.x
 ```
 
 ## Features
@@ -20,7 +20,6 @@ This repository will help you get started with building a frontend wallet functi
   - Notices
   - Reports
 - Perform Withdrawals
-  - Relay dApp address
   - Voucher Execution
 
 ## Configurtion
@@ -32,18 +31,17 @@ Edit src/config.json to set the testnet parameters and deployment, inspect, grap
 In the project directory, run:
 
 ```shell
-yarn
-yarn codegen
+pnpm install
 ```
 
 to build the app.
 
 ```shell
-yarn start
+pnpm dev
 ```
 
 Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+Open [http://localhost:5173](http://localhost:5173) to view it in the browser.
 
 ## Voucher Notes
 
@@ -55,7 +53,7 @@ curl --data '{"id":1337,"jsonrpc":"2.0","method":"evm_increaseTime","params":[86
 ```
 Alternatively, you can run cartesi node with shorter epoch duration in seconds
 ```
-sunodo run --epoch-duration=60
+cartesi start --epoch-duration=60
 ```
 
 [![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/lynoferraz/frontend-web-cartesi)

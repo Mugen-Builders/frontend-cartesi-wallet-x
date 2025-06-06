@@ -1,171 +1,192 @@
-// Copyright 2022 Cartesi Pte. Ltd.
-
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License. You may obtain a copy
-// of the license at http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
-import { ethers } from "ethers";
 import React, { useEffect, useState } from "react";
-import { useNoticesQuery } from "./generated/graphql";
-import { useToast } from '@chakra-ui/react'
-import { Badge, Button } from '@chakra-ui/react'
-import {
-    Table,
-    Thead,
-    Tbody,
-    Tfoot,
-    Tr,
-    Th,
-    Td,
-    TableCaption,
-    TableContainer,
-    Box
-} from '@chakra-ui/react'
+import { useToast, Button, Box, Table, Thead, Tbody, Tr, Th, Td, Badge, Text, VStack, HStack } from '@chakra-ui/react';
+import { ethers } from "ethers";
+import { getL2Client } from './utils/chain';
+import configFile from "./config.json";
+import { type Output as CartesiOutput } from "@cartesi/viem";
 
-type Notice = {
-    id: string;
-    index: number;
-    input: any, //{index: number; epoch: {index: number; }
-    payload: string;
+const config: any = configFile;
+
+type DepositData = {
+    type: "deposit";
+    tokenType: "ETH" | "ERC20" | "ERC721";
+    value: string;
+    sender: string;
+    token?: string;
+    tokenId?: string;
+    timestamp: number;
 };
 
-export const Notices: React.FC = () => {
-    const [result, reexecuteQuery] = useNoticesQuery();
-    const { data, fetching, error } = result;
-    const [previousLength, setPreviousLength] = useState<number>(0);
+export const Notices: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => {
+    const [notices, setNotices] = useState<CartesiOutput[]>([]);
+    const [loading, setLoading] = useState(false);
+    const toast = useToast();
 
-    const toast = useToast()
+    const fetchNotices = async () => {
+        setLoading(true);
+        try {
+            const rpcUrl = `${config["0x343a"].inspectAPIURL}/rpc`;
+            console.log('Using RPC URL:', rpcUrl);
+            const client = await getL2Client(rpcUrl);
+            if (!client) {
+                throw new Error('Failed to create Cartesi client');
+            }
+
+            console.log('Fetching notices for app:', appAddress);
+            const result = await client.listOutputs({
+                application: appAddress,
+                outputType: "Notice",
+                limit: 20,
+                offset: 0
+            });
+
+            console.log('Raw notices data:', result.data);
+            setNotices(result.data || []);
+        } catch (err) {
+            console.error('Error fetching notices:', err);
+            toast({
+                title: "Error",
+                description: err instanceof Error ? err.message : 'Failed to fetch notices',
+                status: "error",
+                duration: 5000,
+                isClosable: true,
+            });
+        } finally {
+            setLoading(false);
+        }
+    };
 
     useEffect(() => {
-        reexecuteQuery({ requestPolicy: 'network-only' });
-    }, [reexecuteQuery]);
-
-    if (fetching) return <p>Loading...</p>;
-    if (error) return <p>Oh no... {error.message}</p>;
-
-    if (!data || !data.notices) return <p>No notices</p>;
-
-    const notices: Notice[] = data.notices.edges.map((node: any) => {
-        const n = node.node;
-        let inputPayload = n?.input.payload;
-        if (inputPayload) {
-            try {
-                inputPayload = ethers.utils.toUtf8String(inputPayload);
-            } catch (e) {
-                inputPayload = inputPayload + " (hex)";
-            }
-        } else {
-            inputPayload = "(empty)";
+        if (appAddress) {
+            fetchNotices();
         }
-        let payload = n?.payload;
-        if (payload) {
-            try {
-                payload = ethers.utils.toUtf8String(payload);
-            } catch (e) {
-                payload = payload + " (hex)";
-            }
-        } else {
-            payload = "(empty)";
-        }
-        return {
-            id: `${n?.id}`,
-            index: parseInt(n?.index),
-            payload: `${payload}`,
-            input: n ? { index: n.input.index, payload: inputPayload } : {},
-        };
-    }).sort((b: any, a: any) => {
-        if (a.input.index === b.input.index) {
-            return b.index - a.index;
-        } else {
-            return b.input.index - a.input.index;
-        }
-    });
+    }, [appAddress]);
 
-    function payloadIsJSON(payload: any) {
+    const decodeNoticeData = (output: CartesiOutput): DepositData | null => {
         try {
-            JSON.parse(payload);
-            return true;
-        } catch (e) {
-            return false;
-        }
-    }
+            if (!output.decodedData) return null;
 
-    // const forceUpdate = useForceUpdate();
+            // First parse the outer JSON
+            const outerData = JSON.parse(JSON.stringify(output.decodedData));
+            console.log('Outer data:', outerData);
+
+            // If it's a Notice type with a hex payload, decode that
+            if (outerData.type === "Notice" && outerData.payload) {
+                const innerPayload = ethers.utils.toUtf8String(outerData.payload);
+                console.log('Decoded inner payload:', innerPayload);
+                return JSON.parse(innerPayload);
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Error decoding notice data:', error);
+            return null;
+        }
+    };
+
+    const renderNoticeContent = (output: CartesiOutput) => {
+        console.log('Rendering notice:', output);
+        
+        const data = decodeNoticeData(output);
+        if (!data) {
+            return (
+                <VStack align="start" spacing={1}>
+                    <Badge colorScheme="gray">Raw Data</Badge>
+                    <Text color="gray.600" fontSize="sm">
+                        {JSON.stringify(output.decodedData, null, 2)}
+                    </Text>
+                </VStack>
+            );
+        }
+
+        // Handle deposit notices
+        if (data.type === "deposit") {
+            if (data.tokenType === "ETH") {
+                return (
+                    <HStack>
+                        <Badge colorScheme="cyan">ETH Deposit</Badge>
+                        <Text>
+                            {ethers.utils.formatEther(data.value)} Ξ deposited by {data.sender}
+                        </Text>
+                    </HStack>
+                );
+            }
+            if (data.tokenType === "ERC20") {
+                return (
+                    <HStack>
+                        <Badge colorScheme="green">ERC20 Deposit</Badge>
+                        <Text>
+                            {ethers.utils.formatEther(data.value)} tokens from {data.token} deposited by {data.sender}
+                        </Text>
+                    </HStack>
+                );
+            }
+            if (data.tokenType === "ERC721") {
+                return (
+                    <HStack>
+                        <Badge colorScheme="purple">NFT Deposit</Badge>
+                        <Text>
+                            NFT {data.tokenId} from {data.token} deposited by {data.sender}
+                        </Text>
+                    </HStack>
+                );
+            }
+        }
+
+        // For any other type of notice, display the raw data
+        return (
+            <VStack align="start" spacing={1}>
+                <Badge colorScheme="gray">Raw Data</Badge>
+                <Text color="gray.600" fontSize="sm">
+                    {JSON.stringify(data, null, 2)}
+                </Text>
+            </VStack>
+        );
+    };
+
     return (
-        <Box >
-            <Table>
+        <Box>
+            <Table variant="simple">
                 <Thead>
                     <Tr>
-                        {/* <th>Input Index</th>
-                        <th>Notice Index</th> */}
-                        {/* <th>Input Payload</th> */}
-                        <Th>Notices <Button size='xs' onClick={() => {
-                            reexecuteQuery({ requestPolicy: 'network-only' });
-                            }}>🔃</Button>
+                        <Th>
+                            <HStack justify="space-between">
+                                <Text>Notices</Text>
+                                <Button 
+                                    size="sm"
+                                    colorScheme="blue"
+                                    variant="outline"
+                                    onClick={fetchNotices}
+                                    isLoading={loading}
+                                    leftIcon={<span>🔄</span>}
+                                >
+                                    Refresh
+                                </Button>
+                            </HStack>
                         </Th>
-                        <Th></Th>
                     </Tr>
                 </Thead>
                 <Tbody>
-                    {notices.length === 0 && (
+                    {notices.length === 0 ? (
                         <Tr>
-                            <Td colSpan={4}>-</Td>
+                            <Td>No notices found</Td>
                         </Tr>
+                    ) : (
+                        [...notices].reverse().map((notice) => (
+                            <Tr key={`${notice.inputIndex}-${notice.index}`}>
+                                <Td>
+                                    <VStack align="start" spacing={2}>
+                                        <Text fontSize="sm" color="gray.500">
+                                            Input #{notice.inputIndex.toString()} • Notice #{notice.index.toString()}
+                                        </Text>
+                                        {renderNoticeContent(notice)}
+                                    </VStack>
+                                </Td>
+                            </Tr>
+                        ))
                     )}
-                    {notices.map((n: any) => (
-                        <Tr key={`${n.input.index}-${n.index}`}>
-
-                            {/* Conditionally render deposit activity */}
-                            {payloadIsJSON(n.payload) ? (
-                                JSON.parse(n.payload).type === "etherdeposit" ? (
-                                    <Td color={'grey'}><Badge colorScheme="cyan">{JSON.parse(n.payload).type}</Badge></Td>
-                                ) :
-                                    JSON.parse(n.payload).type === "erc20deposit" ? (
-                                        <Td color={'grey'}><Badge colorScheme="green">{JSON.parse(n.payload).type}</Badge></Td>
-                                    ) :
-                                        JSON.parse(n.payload).type === "erc721deposit" ? (
-                                            <Td color={'grey'}><Badge colorScheme="purple">{JSON.parse(n.payload).type}</Badge> </Td>
-                                        ) : (
-                                            // Render something else for other JSON content
-                                            <Td color={'grey'}>{JSON.stringify(n.payload)}</Td>
-                                        )
-                            ) : (
-                                // Render if payload is not JSON
-                                <Td color={'grey'}><Badge>DappAdressRelay</Badge></Td>
-                            )}
-
-                            {payloadIsJSON(n.payload) ? (
-                                JSON.parse(n.payload).type === "etherdeposit" ? (
-                                    <Td color={'grey'}> {ethers.utils.formatEther((JSON.parse(n.payload).content).amount)} Ξ deposited to ctsi account {(JSON.parse(n.payload).content).address} </Td>
-                                ) :
-                                    JSON.parse(n.payload).type === "erc20deposit" ? (
-                                        <Td color={'grey'}> {ethers.utils.formatEther((JSON.parse(n.payload).content).amount)} amount deposited to ctsi account {(JSON.parse(n.payload).content).address}. ERC20 address {(JSON.parse(n.payload).content).erc20} </Td>
-                                    ) :
-                                        JSON.parse(n.payload).type === "erc721deposit" ? (
-                                            <Td color={'grey'}> NFT address <Badge variant="outline">{(JSON.parse(n.payload).content).erc721}</Badge> and id {(JSON.parse(n.payload).content).token_id} transferred to ctsi account {(JSON.parse(n.payload).content).address}</Td>
-                                        ) : (
-                                            // Render something else for other JSON content
-                                            <Td color={'grey'}>{JSON.stringify(n.payload)}</Td>
-                                        )
-                            ) : (
-                                // Render if payload is not JSON
-                                <Td color={'grey'}>{n.payload}</Td>
-                            )}
-
-
-
-
-                        </Tr>
-                    ))}
                 </Tbody>
             </Table>
-
         </Box>
     );
 };

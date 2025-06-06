@@ -1,137 +1,289 @@
-// Copyright 2022 Cartesi Pte. Ltd.
-
-// Licensed under the Apache License, Version 2.0 (the "License"); you may not
-// use this file except in compliance with the License. You may obtain a copy
-// of the license at http://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
-// WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
-// License for the specific language governing permissions and limitations
-// under the License.
-
 import React, { useState } from "react";
-import { useSetChain } from "@web3-onboard/react";
+import { useSetChain, useConnectWallet } from "@web3-onboard/react";
 import { ethers } from "ethers";
-// import { useRollups } from "./useRollups";
-
 import configFile from "./config.json";
-import { parseEther } from "ethers/lib/utils";
-//import "./App.css"
+import { createCartesiPublicClient } from "@cartesi/viem";
+import { http } from "viem";
 import {
     Table,
     Thead,
     Tbody,
-    Tfoot,
     Tr,
     Th,
     Td,
-    TableCaption,
     TableContainer,
     Button,
     Stack,
     Box,
-    Spacer
-  } from '@chakra-ui/react'
+    useToast,
+    Text,
+    Heading,
+    VStack,
+    HStack,
+    Badge,
+    Divider,
+    Image,
+} from '@chakra-ui/react'
 
 const config: any = configFile;
 interface Report {
     payload: string;
 }
 
-export const Balance: React.FC = () => {
-    // const rollups = useRollups();
+interface BalanceResult {
+    address: string;
+    balances: {
+        ETH: string;
+        ERC20: Array<{address: string, amount: string}>;
+        ERC721: Array<{address: string, tokenId: string}>;
+    };
+}
+
+export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => {
     const [{ connectedChain }] = useSetChain();
+    const [{ wallet }] = useConnectWallet();
+    const connectedAccount = wallet?.accounts[0]?.address;
+    const toast = useToast();
+    const [isLoading, setIsLoading] = useState(false);
+    const [reports, setReports] = useState<string[]>([]);
+    const [balanceResult, setBalanceResult] = useState<BalanceResult | null>(null);
+
     const inspectCall = async (str: string) => {
         let payload = str;
-        if (hexData) {
-            const uint8array = ethers.utils.arrayify(payload);
-            payload = new TextDecoder().decode(uint8array);
-        }
         if (!connectedChain){
+            toast({
+                title: "Error",
+                description: "Please connect to a network first",
+                status: "error",
+                duration: 5000,
+                isClosable: true,
+            });
             return;
         }
-        
-        let apiURL= ""
 
-        if(config[connectedChain.id]?.inspectAPIURL) {
-            apiURL = `${config[connectedChain.id].inspectAPIURL}/inspect`;
-        } else {
-            console.error(`No inspect interface defined for chain ${connectedChain.id}`);
-            return;
-        }
-        
-        let fetchData: Promise<Response>;
-        if (postData) {
-            const payloadBlob = new TextEncoder().encode(payload);
-            fetchData = fetch(`${apiURL}`, { method: 'POST', body: payloadBlob });
-        } else {
-            fetchData = fetch(`${apiURL}/${payload}`);
-        }
-        fetchData
-            .then(response => response.json())
-            .then(data => {
-                setReports(data.reports);
-                setMetadata({status: data.status, exception_payload: data.exception_payload});
-                console.log("Metadata:", data.reports);
+        try {
+            if (!config[connectedChain.id]?.inspectAPIURL) {
+                toast({
+                    title: "Error",
+                    description: `No inspect interface defined for chain ${connectedChain.id}`,
+                    status: "error",
+                    duration: 5000,
+                    isClosable: true,
+                });
+                return;
+            }
+
+            let apiURL = `${config[connectedChain.id].inspectAPIURL}/inspect/${appAddress}`;
+            
+            setIsLoading(true);
+            try {
+                const payloadBlob = new TextEncoder().encode(payload);
+                const response = await fetch(`${apiURL}`, { method: 'POST', body: payloadBlob });
+                const data = await response.json();
+                console.log("DATA from inspect: ", data);
+
+                if (data.status === "Rejected") {
+                    toast({
+                        title: "Server Error",
+                        description: "The server rejected the request. Please try again later.",
+                        status: "error",
+                        duration: 5000,
+                        isClosable: true,
+                    });
+                    return;
+                }
+
+                if (data.status === "Accepted") {
+                    if (!data.reports || data.reports.length === 0) {
+                        toast({
+                            title: "No Data",
+                            description: "No balance data available. This might be due to an error in processing.",
+                            status: "warning",
+                            duration: 5000,
+                            isClosable: true,
+                        });
+                    }
+                }
+
+                //setReports(data.reports);
 
                 // Decode payload from each report
-                const decode = data.reports.map((report: Report) => {
-                return ethers.utils.toUtf8String(report.payload);
+                if (data.reports && data.reports.length > 0) {
+                    const decode = data.reports.map((report: Report) => {
+                        return ethers.utils.toUtf8String(report.payload);
+                    });
+                    try {
+                        const result = JSON.parse(decode[0]);
+                        setBalanceResult(result);
+                    } catch (parseError) {
+                        toast({
+                            title: "Data Error",
+                            description: "Failed to parse balance data",
+                            status: "error",
+                            duration: 5000,
+                            isClosable: true,
+                        });
+                    }
+                }
+            } catch (error) {
+                toast({
+                    title: "Network Error",
+                    description: "Failed to fetch balance data. Please check your connection.",
+                    status: "error",
+                    duration: 5000,
+                    isClosable: true,
                 });
-                console.log("Decoded Reports:", decode);
-                const reportData = JSON.parse(decode)
-                console.log("Report data: ", reportData)
-                setDecodedReports(reportData)
-                console.log("Erc20 : ", decodedReports.erc20)
-                //console.log(parseEther("1000000000000000000", "gwei"))
+            } finally {
+                setIsLoading(false);
+            }
+        } catch (error) {
+            toast({
+                title: "Application Error",
+                description: "Failed to validate application address",
+                status: "error",
+                duration: 5000,
+                isClosable: true,
             });
+        }
     };
-    const [inspectData, setInspectData] = useState<string>("");
-    const [reports, setReports] = useState<string[]>([]);
-    const [decodedReports, setDecodedReports] = useState<any>({});
-    const [metadata, setMetadata] = useState<any>({});
-    const [hexData, setHexData] = useState<boolean>(false);
-    const [postData, setPostData] = useState<boolean>(false);
+
+    const formatAddress = (address: string) => {
+        return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    };
 
     return (
-        <Box borderWidth='1px' borderRadius='lg' overflow='hidden'>
-        <TableContainer>
-            <Stack>
-            <Table variant='striped' size="lg">
-                <Thead>
-                    <Tr>
-                        <Th textAlign={'center'}>Ether</Th>
-                        <Th textAlign={'center'}>ERC-20</Th>
-                        <Th textAlign={'center'}>ERC-721</Th>
-                    </Tr>
-                </Thead>
-                <Tbody>
-                    {reports?.length === 0 && (
-                        <Tr>
-                            <Td colSpan={4} textAlign={'center'} fontSize='14' color='grey' >looks like your cartesi dapp balance is zero! 🙁</Td>
-                        </Tr>
-                    )}
-                
-                    {<Tr key={`${decodedReports}`}>
-                        {decodedReports && decodedReports.ether && (
-                        <Td textAlign={'center'}>{ethers.utils.formatEther(decodedReports.ether)}</Td> )}
-                        { decodedReports && decodedReports.erc20 && (
-                        <Td textAlign={'center'}>
-                            <div>📍 {String(decodedReports.erc20).split(",")[0]}</div>
-                            <div>🤑 {Number(String(decodedReports.erc20).split(",")[1]) > 0 ? Number(String(decodedReports.erc20).split(",")[1]) / 10**18 : null} </div>
-                        </Td> )}
-                        {decodedReports && decodedReports.erc721 && (
-                        <Td textAlign={'center'}>
-                            <div>📍 {String(decodedReports.erc721).split(",")[0]}</div>
-                            <div>🆔 {String(decodedReports.erc721).split(",")[1]}</div>
-                        </Td> )}
-                    </Tr>}
-                </Tbody>
-            </Table>
-            <Button onClick={() => inspectCall("balance/0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266")}>Get Balance</Button>
-            </Stack>
-        </TableContainer>
+        <Box 
+            borderWidth='1px' 
+            borderRadius='xl' 
+            overflow='hidden' 
+            bg="white"
+            boxShadow="sm"
+            p={6}
+        >
+            <VStack spacing={6} align="stretch">
+                <HStack justify="space-between" align="center">
+                    <HStack spacing={3}>
+                        <Image 
+                            src="/ctsi-icon.svg" 
+                            alt="Cartesi Logo" 
+                            boxSize="32px"
+                            borderRadius="md"
+                        />
+                        <VStack align="start" spacing={1}>
+                            <Heading size="md">Application Wallet</Heading>
+                            {connectedAccount && (
+                                <Text fontSize="sm" color="gray.500">
+                                    {formatAddress(connectedAccount)}
+                                </Text>
+                            )}
+                        </VStack>
+                    </HStack>
+                    <Button 
+                        size="sm"
+                        colorScheme="blue"
+                        variant="outline"
+                        onClick={() => inspectCall(`balance/${connectedAccount}`)}
+                        isLoading={isLoading}
+                        loadingText="Fetching..."
+                    >
+                        Refresh
+                    </Button>
+                </HStack>
+
+                <Divider />
+
+                {!balanceResult ? (
+                    <Box 
+                        p={8} 
+                        textAlign="center" 
+                        bg="gray.50" 
+                        borderRadius="lg"
+                    >
+                        <Text color="gray.500">
+                            No balance data available. Click refresh to fetch your balance.
+                        </Text>
+                    </Box>
+                ) : (
+                    <VStack spacing={6} align="stretch">
+                        {/* ETH Balance */}
+                        <Box 
+                            p={4} 
+                            borderWidth="1px" 
+                            borderRadius="lg" 
+                            bg="blue.50"
+                        >
+                            <HStack justify="space-between">
+                                <HStack>
+                                    <Text fontWeight="bold">
+                                        {ethers.utils.formatEther(balanceResult.balances.ETH)}
+                                    </Text>
+                                    <Badge colorScheme="blue" fontSize="md">
+                                        ETH
+                                    </Badge>
+                                </HStack>
+                            </HStack>
+                        </Box>
+
+                        {/* ERC20 Tokens */}
+                        <Box>
+                            <Text fontWeight="semibold" mb={2}>ERC20 Tokens</Text>
+                            {balanceResult.balances.ERC20.length > 0 ? (
+                                <VStack spacing={3} align="stretch">
+                                    {balanceResult.balances.ERC20.map((token, index) => (
+                                        <Box 
+                                            key={index}
+                                            p={3}
+                                            borderWidth="1px"
+                                            borderRadius="md"
+                                            bg="gray.50"
+                                        >
+                                            <HStack justify="space-between">
+                                                <Text fontSize="sm" color="gray.600">
+                                                    {formatAddress(token.address)}
+                                                </Text>
+                                                <Text fontWeight="medium">
+                                                    {ethers.utils.formatEther(token.amount)}
+                                                </Text>
+                                            </HStack>
+                                        </Box>
+                                    ))}
+                                </VStack>
+                            ) : (
+                                <Text color="gray.500" fontSize="sm">No ERC20 tokens</Text>
+                            )}
+                        </Box>
+
+                        {/* ERC721 Tokens */}
+                        <Box>
+                            <Text fontWeight="semibold" mb={2}>NFTs (ERC721)</Text>
+                            {balanceResult.balances.ERC721.length > 0 ? (
+                                <VStack spacing={3} align="stretch">
+                                    {balanceResult.balances.ERC721.map((token, index) => (
+                                        <Box 
+                                            key={index}
+                                            p={3}
+                                            borderWidth="1px"
+                                            borderRadius="md"
+                                            bg="gray.50"
+                                        >
+                                            <HStack justify="space-between">
+                                                <Text fontSize="sm" color="gray.600">
+                                                    {formatAddress(token.address)}
+                                                </Text>
+                                                <Badge colorScheme="purple">
+                                                    ID: {token.tokenId}
+                                                </Badge>
+                                            </HStack>
+                                        </Box>
+                                    ))}
+                                </VStack>
+                            ) : (
+                                <Text color="gray.500" fontSize="sm">No NFTs</Text>
+                            )}
+                        </Box>
+                    </VStack>
+                )}
+            </VStack>
         </Box>
     );
 };
