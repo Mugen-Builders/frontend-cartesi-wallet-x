@@ -50,7 +50,7 @@ export async function getClient(chainId: number) {
   if (!chain) return null;
   return createPublicClient({
     chain: chain,
-    transport: http(),
+    transport: http('http://localhost:8080/anvil'),
   }).extend(publicActionsL1());
 }
 

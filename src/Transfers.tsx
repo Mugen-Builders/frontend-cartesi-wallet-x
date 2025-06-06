@@ -40,7 +40,10 @@ import { Notices } from "./Notices";
 import { Reports } from "./Reports";
 import { INodeComponentProps } from "./utils/models";
 import { chains, getClient, getWalletClient } from "./utils/chain";
+import configFile from "./config.json";
+import { erc20PortalAddress } from "@cartesi/viem/abi";
 
+const config: any = configFile;
 
 export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentProps,) => {
   const [chainId, setChainId] = useState<number>();
@@ -56,59 +59,6 @@ export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentPr
     console.log("chainId: ", chainId); 
   }, [props.chain]);
 
-  /*
-  const depositErc20ToPortal = async (token: string, amount: number) => {
-    try {
-      if (rollups && provider) {
-        const data = ethers.utils.toUtf8Bytes(
-          `Deposited (${amount}) of ERC20 (${token}).`
-        );
-        //const data = `Deposited ${args.amount} tokens (${args.token}) for DAppERC20Portal(${portalAddress}) (signer: ${address})`;
-        const signer = provider.getSigner();
-        const signerAddress = await signer.getAddress();
-
-        const erc20PortalAddress = rollups.erc20PortalContract.address;
-        const tokenContract = signer
-          ? IERC20__factory.connect(token, signer)
-          : IERC20__factory.connect(token, provider);
-
-        // query current allowance
-        const currentAllowance = await tokenContract.allowance(
-          signerAddress,
-          erc20PortalAddress
-        );
-        if (ethers.utils.parseEther(`${amount}`) > currentAllowance) {
-          // Allow portal to withdraw `amount` tokens from signer
-          const tx = await tokenContract.approve(
-            erc20PortalAddress,
-            ethers.utils.parseEther(`${amount}`)
-          );
-          const receipt = await tx.wait(1);
-          const event = (
-            await tokenContract.queryFilter(
-              tokenContract.filters.Approval(),
-              receipt.blockHash
-            )
-          ).pop();
-          if (!event) {
-            throw Error(
-              `could not approve ${amount} tokens for DAppERC20Portal(${erc20PortalAddress})  (signer: ${signerAddress}, tx: ${tx.hash})`
-            );
-          }
-        }
-
-        await rollups.erc20PortalContract.depositERC20Tokens(
-          token,
-          propos.dappAddress,
-          ethers.utils.parseEther(`${amount}`),
-          data
-        );
-      }
-    } catch (e) {
-      console.log(`${e}`);
-    }
-  };
-  */
   const depositEtherToPortal = async (value: number) => {
     try {
       if (chainId) {
@@ -133,6 +83,94 @@ export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentPr
       }
     } catch (e) {
       console.log(`${e}`);
+    }
+  };
+
+  const depositErc20ToPortal = async (token: `0x${string}`, value: bigint) => {
+    try {
+      if (chainId) {
+        const client = await getClient(chainId);
+        const walletClient = await getWalletClient(chainId);
+
+        if (!client || !walletClient) return;
+
+        const [address] = await walletClient.requestAddresses();
+        if (!address) return;
+
+        const currAllowance = await client.readContract({
+          address: token,
+          abi: erc20Abi,
+          functionName: "allowance",
+          args: [address, erc20PortalAddress],
+        });
+
+        if (currAllowance < value) {
+          const { request } = await client.simulateContract({
+            account: address,
+            address: token,
+            abi: erc20Abi,
+            functionName: "approve",
+            args: [erc20PortalAddress, value],
+          });
+          const txHash = await walletClient.writeContract(request);
+          await client.waitForTransactionReceipt({ hash: txHash });
+        }
+
+        const data = toHex(`Deposited (${value}) of ERC20 (${token}).`);
+
+        const txHash = await walletClient.depositERC20Tokens({
+          account: address,
+          token: token,
+          chain: chains[chainId],
+          execLayerData: data,
+          amount: value,
+          application: erc20PortalAddress,
+        });
+
+        await client.waitForTransactionReceipt({ hash: txHash });
+      }
+    } catch (e) {
+      if (e instanceof BaseError) {
+        console.error(e.message);
+      } else {
+        console.error(e);
+      }
+    }
+  };
+
+  const withdrawErc20 = async (amount: number, token: string) => {
+    try {
+      if (chainId && props.appAddress) {
+        const client = await getClient(chainId);
+        const walletClient = await getWalletClient(chainId);
+
+        if (!client || !walletClient) return;
+
+        const [address] = await walletClient.requestAddresses();
+        if (!address) return;
+
+        const amountInWei = parseUnits(amount.toString(), 18);
+        const input_obj = {
+          method: "erc20_withdraw",
+          args: {
+            erc20: token,
+            amount: amountInWei.toString(),
+          },
+        };
+        const data = JSON.stringify(input_obj);
+        const payload = toHex(data);
+        
+        const txHash = await walletClient.addInput({
+          application: props.appAddress,
+          payload,
+          account: address,
+          chain: chains[chainId],
+        });
+
+        await client.waitForTransactionReceipt({ hash: txHash });
+      }
+    } catch (e) {
+      console.log(e);
     }
   };
 
@@ -170,105 +208,6 @@ export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentPr
     }
   };
 
-  /*
-  const withdrawErc20 = async (amount: number, address: String) => {
-    try {
-      if (rollups && provider) {
-        let erc20_amount = ethers.utils.parseEther(String(amount)).toString();
-        console.log("erc20 after parsing: ", erc20_amount);
-        const input_obj = {
-          method: "erc20_withdraw",
-          args: {
-            erc20: address,
-            amount: erc20_amount,
-          },
-        };
-        const data = JSON.stringify(input_obj);
-        let payload = ethers.utils.toUtf8Bytes(data);
-        await rollups.inputContract.addInput(propos.dappAddress, payload);
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  };
-  */
-
-  /*
-  const withdrawErc721 = async (address: String, id: number) => {
-    try {
-      if (rollups && provider) {
-        let erc721_id = String(id);
-        console.log("erc721 after parsing: ", erc721_id);
-        const input_obj = {
-          method: "erc721_withdrawal",
-          args: {
-            erc721: address,
-            token_id: id,
-          },
-        };
-        const data = JSON.stringify(input_obj);
-        let payload = ethers.utils.toUtf8Bytes(data);
-        await rollups.inputContract.addInput(propos.dappAddress, payload);
-      }
-    } catch (e) {
-      console.log(e);
-    }
-  };
-  */
-
-  /*
-  const transferNftToPortal = async (
-    contractAddress: string,
-    nftid: number
-  ) => {
-    try {
-      if (rollups && provider) {
-        const data = ethers.utils.toUtf8Bytes(
-          `Deposited (${nftid}) of ERC721 (${contractAddress}).`
-        );
-        //const data = `Deposited ${args.amount} tokens (${args.token}) for DAppERC20Portal(${portalAddress}) (signer: ${address})`;
-        const signer = provider.getSigner();
-        const signerAddress = await signer.getAddress();
-
-        const erc721PortalAddress = rollups.erc721PortalContract.address;
-
-        const tokenContract = signer
-          ? IERC721__factory.connect(contractAddress, signer)
-          : IERC721__factory.connect(contractAddress, provider);
-
-        // query current approval
-        const currentApproval = await tokenContract.getApproved(nftid);
-        if (currentApproval !== erc721PortalAddress) {
-          // Allow portal to withdraw `amount` tokens from signer
-          const tx = await tokenContract.approve(erc721PortalAddress, nftid);
-          const receipt = await tx.wait(1);
-          const event = (
-            await tokenContract.queryFilter(
-              tokenContract.filters.Approval(),
-              receipt.blockHash
-            )
-          ).pop();
-          if (!event) {
-            throw Error(
-              `could not approve ${nftid} for DAppERC721Portal(${erc721PortalAddress})  (signer: ${signerAddress}, tx: ${tx.hash})`
-            );
-          }
-        }
-
-        // Transfer
-        rollups.erc721PortalContract.depositERC721Token(
-          contractAddress,
-          propos.dappAddress,
-          nftid,
-          "0x",
-          data
-        );
-      }
-    } catch (e) {
-      console.log(`${e}`);
-    }
-  };
-  */
   const [input, setInput] = useState<string>("");
   const [hexInput, setHexInput] = useState<boolean>(false);
   const [erc20Amount, setErc20Amount] = useState<number>(0);
@@ -332,7 +271,6 @@ export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentPr
                   <br/>
                 </AccordionPanel>
               </AccordionItem>
-              {/*
               <AccordionItem>
                 <h2>
                   <AccordionButton>
@@ -345,41 +283,38 @@ export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentPr
                     <Input
                       type="text"
                       variant="outline"
-                      placeholder="Address"
+                      placeholder="Token Address"
                       onChange={(e) => setErc20Token(String(e.target.value))}
                       value={erc20Token}
                     />
                     <Input
                       type="number"
-                      variant="outline"
+                      step="any"
                       placeholder="Amount"
                       onChange={(e) => setErc20Amount(Number(e.target.value))}
                       value={erc20Amount}
                     />
                     <Button
-                    colorScheme="blue"
-                    size="sm"
-                    onClick={() =>
-                        depositErc20ToPortal(erc20Token, erc20Amount)
-                    }
-                    disabled={!rollups}
+                      colorScheme="blue"
+                      size="sm"
+                      onClick={() => depositErc20ToPortal(erc20Token as `0x${string}`, BigInt(erc20Amount))}
+                      disabled={!chainId}
                     >
-                    Deposit
+                      Deposit
                     </Button>
                     <Button
-                    size="sm"
-                    onClick={() => {
+                      size="sm"
+                      onClick={() => {
                         withdrawErc20(erc20Amount, erc20Token);
-                    }}
-                    disabled={!rollups}
+                      }}
+                      disabled={!chainId}
                     >
-                    Withdraw
+                      Withdraw
                     </Button>
                   </Stack>
                   <br/>
                 </AccordionPanel>
               </AccordionItem>
-              */}
               <AccordionItem>
                 <h2>
                   <AccordionButton>
@@ -441,7 +376,7 @@ export const Transfers: React.FC<INodeComponentProps> = (props: INodeComponentPr
             </Accordion>
           </TabPanel>
           <TabPanel>
-            <Notices />
+            <Notices appAddress={props.appAddress} />
             <br />
             <Reports />
           </TabPanel>

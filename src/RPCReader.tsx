@@ -1,67 +1,96 @@
 import React, { useState } from 'react';
-import { Box, Button, Text, VStack, Heading } from '@chakra-ui/react';
+import { Box, Button, Text, VStack, Heading, HStack, Accordion, AccordionItem, AccordionButton, AccordionPanel, AccordionIcon } from '@chakra-ui/react';
+import { type Application, type Output as CartesiOutput, type Report } from "@cartesi/viem";
+import configFile from "./config.json";
+import { getL2Client } from './utils/chain';
 
-interface Application {
-  id: string;
-  name: string;
-}
-
-interface PaginationInfo {
-  total_count: number;
-  limit: number;
-  offset: number;
-}
-
-interface RPCResponse {
-  result?: {
-    data: Application[];
-    pagination: PaginationInfo;
-  };
-  error?: {
-    message: string;
-  };
-}
+const config: any = configFile;
 
 const RPCReader: React.FC = () => {
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [totalCount, setTotalCount] = useState<number | null>(null);
+  const [outputs, setOutputs] = useState<Record<string, CartesiOutput[]>>({});
+  const [reports, setReports] = useState<Record<string, Report[]>>({});
+  const [loadingOutputs, setLoadingOutputs] = useState<Record<string, boolean>>({});
+  const [loadingReports, setLoadingReports] = useState<Record<string, boolean>>({});
 
   const fetchApplications = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://127.0.0.1:8080/rpc', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          method: 'cartesi_listApplications',
-          params: {
-            limit: 20,
-            offset: 0
-          },
-          id: 0,
-        }),
+      // Create Cartesi client using the local development network with /rpc endpoint
+      const rpcUrl = `${config["0x343a"].inspectAPIURL}/rpc`;
+      const client = await getL2Client(rpcUrl);
+      if (!client) {
+        throw new Error('Failed to create Cartesi client');
+      }
+
+      // Get applications using the Cartesi client
+      const result = await client.listApplications({
+        limit: 20,
+        offset: 0
       });
 
-      const data = await response.json() as RPCResponse;
-      
-      if (data.error) {
-        throw new Error(data.error.message || 'Failed to fetch applications');
-      }
-
-      if (data.result) {
-        setApplications(data.result.data || []);
-        setTotalCount(data.result.pagination.total_count);
-      }
+      setApplications(result.data || []);
+      setTotalCount(result.pagination.totalCount);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchOutputs = async (applicationAddress: string) => {
+    setLoadingOutputs(prev => ({ ...prev, [applicationAddress]: true }));
+    try {
+      const rpcUrl = `${config["0x343a"].inspectAPIURL}/rpc`;
+      const client = await getL2Client(rpcUrl);
+      if (!client) {
+        throw new Error('Failed to create Cartesi client');
+      }
+
+      const result = await client.listOutputs({
+        application: applicationAddress,
+        limit: 20,
+        offset: 0
+      });
+
+      setOutputs(prev => ({
+        ...prev,
+        [applicationAddress]: result.data || []
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoadingOutputs(prev => ({ ...prev, [applicationAddress]: false }));
+    }
+  };
+
+  const fetchReports = async (applicationAddress: string) => {
+    setLoadingReports(prev => ({ ...prev, [applicationAddress]: true }));
+    try {
+      const rpcUrl = `${config["0x343a"].inspectAPIURL}/rpc`;
+      const client = await getL2Client(rpcUrl);
+      if (!client) {
+        throw new Error('Failed to create Cartesi client');
+      }
+
+      const result = await client.listReports({
+        application: applicationAddress,
+        limit: 20,
+        offset: 0
+      });
+
+      setReports(prev => ({
+        ...prev,
+        [applicationAddress]: result.data || []
+      }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoadingReports(prev => ({ ...prev, [applicationAddress]: false }));
     }
   };
 
@@ -93,13 +122,81 @@ const RPCReader: React.FC = () => {
               ? "No applications found" 
               : `Found ${totalCount} application(s):`}
           </Heading>
-          {applications.map((app) => (
-            <Box key={app.id} p={2} borderWidth={1} borderRadius="md">
-              <Text>
-                ID: {app.id} - Name: {app.name}
-              </Text>
-            </Box>
-          ))}
+          <Accordion allowMultiple>
+            {applications.map((app) => (
+              <AccordionItem key={app.name}>
+                <h2>
+                  <AccordionButton>
+                    <Box flex="1" textAlign="left">
+                      <HStack justify="space-between">
+                        <Text>{app.name}: {app.applicationAddress}</Text>
+                        <HStack spacing={2}>
+                          <Button
+                            size="sm"
+                            colorScheme="blue"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              fetchOutputs(app.applicationAddress);
+                            }}
+                            isLoading={loadingOutputs[app.applicationAddress]}
+                          >
+                            Outputs
+                          </Button>
+                          <Button
+                            size="sm"
+                            colorScheme="green"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              fetchReports(app.applicationAddress);
+                            }}
+                            isLoading={loadingReports[app.applicationAddress]}
+                          >
+                            Reports
+                          </Button>
+                        </HStack>
+                      </HStack>
+                    </Box>
+                    <AccordionIcon />
+                  </AccordionButton>
+                </h2>
+                <AccordionPanel pb={4}>
+                  <VStack align="stretch" spacing={4}>
+                    {outputs[app.applicationAddress]?.length > 0 && (
+                      <Box>
+                        <Heading size="xs" mb={2}>Outputs:</Heading>
+                        <VStack align="stretch" spacing={2}>
+                          {outputs[app.applicationAddress].map((output) => (
+                            <Box key={output.index} p={2} borderWidth={1} borderRadius="md">
+                              <Text>Index: {output.index.toString()}</Text>
+                              <Text>Input Index: {output.inputIndex.toString()}</Text>
+                              <Text>Data: {JSON.stringify(output.decodedData)}</Text>
+                            </Box>
+                          ))}
+                        </VStack>
+                      </Box>
+                    )}
+                    {reports[app.applicationAddress]?.length > 0 && (
+                      <Box>
+                        <Heading size="xs" mb={2}>Reports:</Heading>
+                        <VStack align="stretch" spacing={2}>
+                          {reports[app.applicationAddress].map((report) => (
+                            <Box key={report.index} p={2} borderWidth={1} borderRadius="md">
+                              <Text>Index: {report.index.toString()}</Text>
+                              <Text>Input Index: {report.inputIndex.toString()}</Text>
+                              <Text>Payload: {report.rawData}</Text>
+                            </Box>
+                          ))}
+                        </VStack>
+                      </Box>
+                    )}
+                    {(!outputs[app.applicationAddress]?.length && !reports[app.applicationAddress]?.length) && (
+                      <Text color="gray.500">No outputs or reports found</Text>
+                    )}
+                  </VStack>
+                </AccordionPanel>
+              </AccordionItem>
+            ))}
+          </Accordion>
         </VStack>
       )}
     </Box>

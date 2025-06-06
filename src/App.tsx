@@ -7,6 +7,7 @@ import configFile from "./config.json";
 import { Balance } from "./Balance";
 import {Input, Box, InputGroup, InputLeftAddon, Stack, SimpleGrid} from "@chakra-ui/react"
 import type { Hex } from "viem";
+//import RPCReader from "./RPCReader";
 
 const config: any = configFile;
 
@@ -27,7 +28,7 @@ init({
 type NetworkProp = typeof Network extends FC<infer P> ? P : never;
 
 const App: FC = () => {
-    const [appAddress, setAppAddress] = useState<string>("0x70ac08179605AF2D9e75782b8DEcDD3c22aA4D0C");
+    const [appAddress, setAppAddress] = useState<string>("0x6d3c6d9507a3a941da262da3aa3ba64b98c5e416");
     const [nodeAddress, setNodeAddress] = useState<string | undefined>(
         "http://localhost:8080",
     );
@@ -53,7 +54,7 @@ const App: FC = () => {
     return (
         <SimpleGrid columns={1} marginLeft={'25%'} marginRight={'25%'}>  
             <Network onChange={connect} />
-            {/* <RPCReader /> */}
+            {/* <RPCReader /> */} 
             {wallet && (
                 <>
             <Stack>

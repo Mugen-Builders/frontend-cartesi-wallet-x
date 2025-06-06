@@ -16,11 +16,27 @@ import {
     Stack,
     Box,
     useToast,
-  } from '@chakra-ui/react'
+    Text,
+    Heading,
+    VStack,
+    HStack,
+    Badge,
+    Divider,
+    Image,
+} from '@chakra-ui/react'
 
 const config: any = configFile;
 interface Report {
     payload: string;
+}
+
+interface BalanceResult {
+    address: string;
+    balances: {
+        ETH: string;
+        ERC20: Array<{address: string, amount: string}>;
+        ERC721: Array<{address: string, tokenId: string}>;
+    };
 }
 
 export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => {
@@ -30,7 +46,7 @@ export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => 
     const toast = useToast();
     const [isLoading, setIsLoading] = useState(false);
     const [reports, setReports] = useState<string[]>([]);
-    const [decodedReports, setDecodedReports] = useState<any>({});
+    const [balanceResult, setBalanceResult] = useState<BalanceResult | null>(null);
 
     const inspectCall = async (str: string) => {
         let payload = str;
@@ -45,30 +61,11 @@ export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => 
             return;
         }
 
-        // Validate app address
         try {
             if (!config[connectedChain.id]?.inspectAPIURL) {
                 toast({
                     title: "Error",
                     description: `No inspect interface defined for chain ${connectedChain.id}`,
-                    status: "error",
-                    duration: 5000,
-                    isClosable: true,
-                });
-                return;
-            }
-
-            const client = createCartesiPublicClient({
-                transport: http(config[connectedChain.id].inspectAPIURL)
-            });
-
-            // Try to get application info to validate it exists
-            try {
-                await client.getApplication({ application: appAddress });
-            } catch (error) {
-                toast({
-                    title: "Invalid Application",
-                    description: "The provided application address is not valid on this network",
                     status: "error",
                     duration: 5000,
                     isClosable: true,
@@ -108,7 +105,7 @@ export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => 
                     }
                 }
 
-                setReports(data.reports);
+                //setReports(data.reports);
 
                 // Decode payload from each report
                 if (data.reports && data.reports.length > 0) {
@@ -116,8 +113,8 @@ export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => 
                         return ethers.utils.toUtf8String(report.payload);
                     });
                     try {
-                        const reportData = JSON.parse(decode);
-                        setDecodedReports(reportData);
+                        const result = JSON.parse(decode[0]);
+                        setBalanceResult(result);
                     } catch (parseError) {
                         toast({
                             title: "Data Error",
@@ -150,50 +147,143 @@ export const Balance: React.FC<{appAddress: `0x${string}`}> = ({appAddress}) => 
         }
     };
 
+    const formatAddress = (address: string) => {
+        return `${address.slice(0, 6)}...${address.slice(-4)}`;
+    };
+
     return (
-        <Box borderWidth='1px' borderRadius='lg' overflow='hidden'>
-        <TableContainer>
-            <Stack>
-            <Table variant='striped' size="lg">
-                <Thead>
-                    <Tr>
-                        <Th textAlign={'center'}>Ether</Th>
-                        <Th textAlign={'center'}>ERC-20</Th>
-                        <Th textAlign={'center'}>ERC-721</Th>
-                    </Tr>
-                </Thead>
-                <Tbody>
-                    {reports?.length === 0 && (
-                        <Tr>
-                            <Td colSpan={4} textAlign={'center'} fontSize='14' color='grey' >Zero in-app balance! Deposit an asset to get started. </Td>
-                        </Tr>
-                    )}
-                
-                    {<Tr key={`${decodedReports}`}>
-                        {decodedReports && decodedReports.ether && (
-                        <Td textAlign={'center'}>{ethers.utils.formatEther(decodedReports.ether)}</Td> )}
-                        { decodedReports && decodedReports.erc20 && (
-                        <Td textAlign={'center'}>
-                            <div>📍 {String(decodedReports.erc20).split(",")[0]}</div>
-                            <div>🤑 {Number(String(decodedReports.erc20).split(",")[1]) > 0 ? Number(String(decodedReports.erc20).split(",")[1]) / 10**18 : null} </div>
-                        </Td> )}
-                        {decodedReports && decodedReports.erc721 && (
-                        <Td textAlign={'center'}>
-                            <div>📍 {String(decodedReports.erc721).split(",")[0]}</div>
-                            <div>🆔 {String(decodedReports.erc721).split(",")[1]}</div>
-                        </Td> )}
-                    </Tr>}
-                </Tbody>
-            </Table>
-            <Button 
-                onClick={() => inspectCall(`balance/${connectedAccount}`)}
-                isLoading={isLoading}
-                loadingText="Fetching balance..."
-            >
-                Get Balance
-            </Button>
-            </Stack>
-        </TableContainer>
+        <Box 
+            borderWidth='1px' 
+            borderRadius='xl' 
+            overflow='hidden' 
+            bg="white"
+            boxShadow="sm"
+            p={6}
+        >
+            <VStack spacing={6} align="stretch">
+                <HStack justify="space-between" align="center">
+                    <HStack spacing={3}>
+                        <Image 
+                            src="/ctsi-icon.svg" 
+                            alt="Cartesi Logo" 
+                            boxSize="32px"
+                            borderRadius="md"
+                        />
+                        <VStack align="start" spacing={1}>
+                            <Heading size="md">Application Wallet</Heading>
+                            {connectedAccount && (
+                                <Text fontSize="sm" color="gray.500">
+                                    {formatAddress(connectedAccount)}
+                                </Text>
+                            )}
+                        </VStack>
+                    </HStack>
+                    <Button 
+                        size="sm"
+                        colorScheme="blue"
+                        variant="outline"
+                        onClick={() => inspectCall(`balance/${connectedAccount}`)}
+                        isLoading={isLoading}
+                        loadingText="Fetching..."
+                    >
+                        Refresh
+                    </Button>
+                </HStack>
+
+                <Divider />
+
+                {!balanceResult ? (
+                    <Box 
+                        p={8} 
+                        textAlign="center" 
+                        bg="gray.50" 
+                        borderRadius="lg"
+                    >
+                        <Text color="gray.500">
+                            No balance data available. Click refresh to fetch your balance.
+                        </Text>
+                    </Box>
+                ) : (
+                    <VStack spacing={6} align="stretch">
+                        {/* ETH Balance */}
+                        <Box 
+                            p={4} 
+                            borderWidth="1px" 
+                            borderRadius="lg" 
+                            bg="blue.50"
+                        >
+                            <HStack justify="space-between">
+                                <HStack>
+                                    <Text fontWeight="bold">
+                                        {ethers.utils.formatEther(balanceResult.balances.ETH)}
+                                    </Text>
+                                    <Badge colorScheme="blue" fontSize="md">
+                                        ETH
+                                    </Badge>
+                                </HStack>
+                            </HStack>
+                        </Box>
+
+                        {/* ERC20 Tokens */}
+                        <Box>
+                            <Text fontWeight="semibold" mb={2}>ERC20 Tokens</Text>
+                            {balanceResult.balances.ERC20.length > 0 ? (
+                                <VStack spacing={3} align="stretch">
+                                    {balanceResult.balances.ERC20.map((token, index) => (
+                                        <Box 
+                                            key={index}
+                                            p={3}
+                                            borderWidth="1px"
+                                            borderRadius="md"
+                                            bg="gray.50"
+                                        >
+                                            <HStack justify="space-between">
+                                                <Text fontSize="sm" color="gray.600">
+                                                    {formatAddress(token.address)}
+                                                </Text>
+                                                <Text fontWeight="medium">
+                                                    {ethers.utils.formatEther(token.amount)}
+                                                </Text>
+                                            </HStack>
+                                        </Box>
+                                    ))}
+                                </VStack>
+                            ) : (
+                                <Text color="gray.500" fontSize="sm">No ERC20 tokens</Text>
+                            )}
+                        </Box>
+
+                        {/* ERC721 Tokens */}
+                        <Box>
+                            <Text fontWeight="semibold" mb={2}>NFTs (ERC721)</Text>
+                            {balanceResult.balances.ERC721.length > 0 ? (
+                                <VStack spacing={3} align="stretch">
+                                    {balanceResult.balances.ERC721.map((token, index) => (
+                                        <Box 
+                                            key={index}
+                                            p={3}
+                                            borderWidth="1px"
+                                            borderRadius="md"
+                                            bg="gray.50"
+                                        >
+                                            <HStack justify="space-between">
+                                                <Text fontSize="sm" color="gray.600">
+                                                    {formatAddress(token.address)}
+                                                </Text>
+                                                <Badge colorScheme="purple">
+                                                    ID: {token.tokenId}
+                                                </Badge>
+                                            </HStack>
+                                        </Box>
+                                    ))}
+                                </VStack>
+                            ) : (
+                                <Text color="gray.500" fontSize="sm">No NFTs</Text>
+                            )}
+                        </Box>
+                    </VStack>
+                )}
+            </VStack>
         </Box>
     );
 };
